@@ -1,15 +1,30 @@
 use itertools::Itertools;
+use radix_fmt::radix_3;
 use std::fs;
 
 fn solve(result: i64, numbers: &Vec<i32>) -> i64 {
     // brute force…
-    for op_number in 0..2_i32.pow(numbers.len() as u32 - 1) {
+    for op_number in 0..3_i32.pow(numbers.len() as u32 - 1) {
+        let op_str = format!(
+            "{:0>width$}",
+            radix_3(op_number as u64).to_string(),
+            width = numbers.len() - 1
+        );
         let mut total = numbers[0] as i64;
         for (i, &number) in numbers.iter().skip(1).enumerate() {
-            if (op_number >> i) & 1 == 1 {
+            let op = op_str.as_bytes()[i];
+            if op == b'0' {
                 total += number as i64;
-            } else {
+            } else if op == b'1' {
                 total *= number as i64;
+            } else if op == b'2' {
+                // concatenate the numbers
+                total *= 10_i64.pow(number.ilog10() as u32 + 1);
+                total += number as i64;
+            }
+            if total > result {
+                // no need to continue
+                break;
             }
         }
         if total == result {

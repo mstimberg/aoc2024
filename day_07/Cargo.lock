@@ -7,6 +7,7 @@ name = "day_07"
 version = "0.1.0"
 dependencies = [
  "itertools",
+ "radix_fmt",
 ]
 
 [[package]]
@@ -23,3 +24,9 @@ checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
+
+[[package]]
+name = "radix_fmt"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce082a9940a7ace2ad4a8b7d0b1eac6aa378895f18be598230c5f2284ac05426"
