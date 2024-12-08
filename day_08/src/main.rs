@@ -16,8 +16,16 @@ fn find_antinodes(c: char, map: &Array2<char>) -> Vec<(i32, i32)> {
         let p1 = p[0];
         let p2 = p[1];
         let dist = (p1.0 - p2.0, p1.1 - p2.1);
-        antinodes.push((p1.0 + dist.0, p1.1 + dist.1));
-        antinodes.push((p2.0 - dist.0, p2.1 - dist.1));
+        // We do some rough filterting based on the row here,
+        // the full filtering will be done later anyway
+        let mut min_idx = -(p1.0 as i32 / dist.0 as i32);
+        let mut max_idx = (size as i32 - p1.0) / dist.0 as i32;
+        if min_idx > max_idx {
+            (max_idx, min_idx) = (min_idx, max_idx);
+        }
+        for idx in min_idx - 1..max_idx + 1 {
+            antinodes.push((p1.0 + idx * dist.0, p1.1 + idx * dist.1));
+        }
     }
     antinodes
 }
