@@ -27,23 +27,27 @@ fn expand(input: &str) -> Vec<i32> {
 }
 
 fn compressed(input: &Vec<i32>) -> Vec<i32> {
-    let mut result = Vec::new();
-    let mut reverse_iterator = input.iter().rev();
-    let n_spaces = input.iter().filter(|&c| *c == -1).count();
-    for i in 0..input.len() - n_spaces {
-        if input[i] != -1 {
-            // copy over
-            result.push(input[i]);
-        } else {
-            let mut rightmost_id;
-            loop {
-                rightmost_id = reverse_iterator.next().unwrap();
-                if *rightmost_id != -1 {
-                    break;
-                }
+    let mut result = input.clone();
+    // This involves a lot of unncessary searching but it's good enough for now
+    let mut current_id = *result.iter().max().unwrap();
+    while current_id >= 0 {
+        println!("{}", current_id);
+        let length = result.iter().filter(|&x| *x == current_id).count();
+        let start = result.iter().position(|x| *x == current_id).unwrap();
+        let mut space_counter = 0;
+        for i in 0..start {
+            if result[i] == -1 {
+                space_counter += 1;
+            } else {
+                space_counter = 0;
             }
-            result.push(*rightmost_id);
+            if space_counter == length {
+                result[i - length + 1..i + 1].fill(current_id);
+                result[start..start + length].fill(-1);
+                break;
+            }
         }
+        current_id -= 1;
     }
     result
 }
@@ -52,6 +56,7 @@ fn checksum(input: &Vec<i32>) -> i64 {
     input
         .iter()
         .enumerate()
+        .filter(|(_, id)| **id != -1)
         .map(|(i, id)| i as i64 * *id as i64)
         .sum()
 }
