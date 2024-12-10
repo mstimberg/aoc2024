@@ -2,10 +2,10 @@ use ndarray::{Array, Array2, Axis};
 use std::collections::HashSet;
 use std::fs;
 
-fn count_paths(map: &Array2<i32>, start: (usize, usize), positions: &mut HashSet<(usize, usize)>) {
+fn count_paths(map: &Array2<i32>, start: (usize, usize), positions: &mut Vec<(usize, usize)>) {
     let digit = map[[start.0, start.1]];
     if digit == 9 {
-        positions.insert(start);
+        positions.push(start);
     }
     for (row_diff, col_diff) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
         let new_row = start.0 as i32 + row_diff;
@@ -46,7 +46,7 @@ fn main() {
     println!("Start positions: {:?}", start_positions);
     let mut count = 0;
     for pos in start_positions {
-        let mut positions = HashSet::new();
+        let mut positions = Vec::new();
         count_paths(&map, pos, &mut positions);
         count += positions.len();
         println!("Positions: {:?}", positions);
