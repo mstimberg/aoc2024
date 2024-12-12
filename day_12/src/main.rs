@@ -4,6 +4,7 @@ use std::cmp;
 use std::collections::HashSet;
 use std::fs;
 
+// Not really necessary, I could have run the algorithm directly on the original map...
 fn expand(map: &Array2<u32>) -> Vec<Array2<bool>> {
     let unique_numbers = map.iter().collect::<HashSet<_>>();
     let mut maps = Vec::new();
@@ -51,9 +52,9 @@ fn label(map: &Array2<bool>) -> Array2<u32> {
 
     //second pass,fix equivalences
     for set in equivalences.sets() {
-        let min_label = set
-            .iter()
-            .fold(99999, |acc, &x| cmp::min(acc, label_map.flatten()[x]));
+        let min_label = set.iter().fold(u32::max_value(), |acc, &x| {
+            cmp::min(acc, label_map.flatten()[x])
+        });
         for &index in set.iter() {
             let r = index / cols;
             let c = index % cols;
@@ -77,15 +78,45 @@ fn areas_perimeter(map: &Array2<u32>) -> Vec<(u32, u32)> {
         padded_zero_one_map
             .slice_mut(s![1..-1, 1..-1])
             .assign(&zero_one_map);
-        let row_borders = padded_zero_one_map
-            .diff(1, Axis(0))
-            .map(|x| x.abs() as u32)
-            .sum();
-        let col_borders = padded_zero_one_map
-            .diff(1, Axis(1))
-            .map(|x| x.abs() as u32)
-            .sum();
-        areas_perimeters.push((area, row_borders + col_borders));
+        let row_borders = padded_zero_one_map.diff(1, Axis(0));
+        let col_borders = padded_zero_one_map.diff(1, Axis(1));
+        // println!("Row borders:\n{:?}", row_borders);
+        // println!("Col borders:\n{:?}", col_borders);
+        let mut sides = 0;
+        for row in row_borders.rows() {
+            let mut current = 0;
+            for &x in row.iter() {
+                if x != 0 {
+                    if x != current {
+                        sides += 1;
+                        current = x;
+                    }
+                } else {
+                    current = 0;
+                }
+            }
+            if current != 0 {
+                sides += 1;
+            }
+        }
+        for col in col_borders.columns() {
+            let mut current = 0;
+            for &x in col.iter() {
+                if x != 0 {
+                    if x != current {
+                        sides += 1;
+                        current = x;
+                    }
+                } else {
+                    current = 0;
+                }
+            }
+            if current != 0 {
+                sides += 1;
+            }
+        }
+
+        areas_perimeters.push((area, sides));
     }
     areas_perimeters
 }
@@ -109,7 +140,7 @@ fn main() {
     let labels = maps.iter().map(|m| label(m));
     let mut total = 0;
     for l in labels {
-        println!("Labeled map:\n{:?}", l);
+        // println!("Labeled map:\n{:?}", l);
         let areas_perimeters = areas_perimeter(&l);
         let price = areas_perimeters
             .iter()
