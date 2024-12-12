@@ -1,0 +1,8 @@
+[package]
+name = "day_12"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+disjoint = "0.8.0"
+ndarray = { git = "https://github.com/rust-ndarray/ndarray.git", version = "0.16.1" }
