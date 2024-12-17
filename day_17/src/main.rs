@@ -3,27 +3,27 @@ use std::fs;
 #[derive(Debug)]
 struct Computer {
     // registers
-    a: i32,
-    b: i32,
-    c: i32,
+    a: i64,
+    b: i64,
+    c: i64,
     ip: usize,
-    output: Vec<i32>,
-    program: Vec<i32>,
+    output: Vec<i64>,
+    program: Vec<i64>,
 }
 
 impl Computer {
-    fn new(a: i32, b: i32, c: i32, program: Vec<i32>) -> Computer {
+    fn new(a: i64, b: i64, c: i64, program: &Vec<i64>) -> Computer {
         Computer {
             a,
             b,
             c,
-            program,
+            program: program.clone(),
             ip: 0,
             output: Vec::new(),
         }
     }
 
-    fn combo(&self, operand: i32) -> i32 {
+    fn combo(&self, operand: i64) -> i64 {
         match operand {
             0 => 0,
             1 => 1,
@@ -36,20 +36,54 @@ impl Computer {
         }
     }
 
-    fn out(&mut self, value: i32) {
+    fn out(&mut self, value: i64) {
         self.output.push(value);
     }
 
-    fn div(&self, a: i32, b: i32) -> i32 {
+    fn div(&self, a: i64, b: i64) -> i64 {
         let mut b = b;
         let mut result = a;
         while b > 0 && result > 0 {
-            result /=2;
+            result /= 2;
             b -= 1;
         }
         result
     }
-    
+
+    fn print_program(&self) {
+        println!(
+            "Program:\n",     
+        );
+        for c in self.program.chunks(2) {
+            let (opcode, operand) = (c[0], c[1]);
+            let combo = match operand {
+                0 => "0",
+                1 => "1",
+                2 => "2",
+                3 => "3",
+                4 => "a",
+                5 => "b",
+                6 => "c",
+                _ => panic!("Invalid operand"),
+            };
+            match opcode {
+                0 => println!("a = a/2**{}", combo),
+                1 => println!("b = b ^ {}", operand),
+                2 => println!("b = {} % 8", combo),
+                3 => println!("jump if a!=0: {}", operand),
+                4 => println!("b = b ^ c ({} is ignored)", operand),
+                5 => println!("out: {} % 8", combo),
+                6 => println!("b = a/2**{}", combo),
+                7 => println!("c = a/2**{}", combo),
+                _ => panic!("Invalid opcode"),
+            }
+        }
+    }
+
+    fn reset(&mut self) {
+        self.ip = 0;
+        self.output.clear();
+    }
 
     fn step(&mut self) -> bool {
         if self.ip >= self.program.len() {
@@ -60,7 +94,7 @@ impl Computer {
         // println!("State before: {:?}", self);
         match opcode {
             0 => {
-                let result = self.div(self.a, self.combo(operand));
+                let result = self.a >> self.combo(operand);
                 self.a = result;
                 self.ip += 2;
             }
@@ -92,46 +126,63 @@ impl Computer {
                 self.ip += 2;
             }
             6 => {
-                let result = self.div(self.a, self.combo(operand));
+                let result = self.a >> self.combo(operand);
                 self.b = result;
                 self.ip += 2;
             }
             7 => {
-                let result = self.div(self.a, self.combo(operand));
+                let result = self.a >> self.combo(operand);
                 self.c = result;
                 self.ip += 2;
             }
             _ => panic!("Invalid opcode"),
         }
-        // println!("State after: {:?}\n", self);
         true
     }
 
     fn run(&mut self) {
-        let mut c = 0;
         while self.step() {
-            c += 1;
-            print!(".");
-            if c % 80 == 0 {
-                println!();
+        }
+    }
+}
+
+fn find_program(prefix: i64, computer: &mut Computer) -> i64 {
+    println!("prefix: {}", prefix);
+    for new_digit in 0..8 {
+        let new_guess = (prefix * 8) | new_digit;
+        computer.reset();
+        computer.a = new_guess;
+        computer.run();
+        if computer.output.len() == computer.program.len() && computer.output[0] == computer.program[0] {
+            println!("Full match!");
+            return new_guess;
+        }
+        if computer.output[0] != computer.program[computer.program.len()-computer.output.len()] {
+            continue;
+        } else {
+            println!("Continuing with {:o} (returned {:?})", new_guess, computer.output);
+            let result= find_program(new_guess, computer);
+            if result != -1 {
+                return result; // a solution!
             }
         }
-        println!();
+
     }
+    -1  // no solution
 }
 
 fn main() {
     let contents = fs::read_to_string("input.txt").expect("Should have been able to read the file");
     let lines: Vec<_> = contents.lines().collect();
     assert!(lines.len() == 5);
-    let a = &lines[0][11..].trim().parse::<i32>().unwrap();
-    let b = &lines[1][11..].trim().parse::<i32>().unwrap();
-    let c = &lines[2][11..].trim().parse::<i32>().unwrap();
+    let a = &lines[0][11..].trim().parse::<i64>().unwrap();
+    let b = &lines[1][11..].trim().parse::<i64>().unwrap();
+    let c = &lines[2][11..].trim().parse::<i64>().unwrap();
     let program = lines[4][9..]
         .split(",")
-        .map(|x| x.parse::<i32>().unwrap())
-        .collect::<Vec<i32>>();
-    let mut computer = Computer::new(*a, *b, *c, program);
-    computer.run();
-    println!("Output:\n{}", computer.output.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(","));
+        .map(|x| x.parse::<i64>().unwrap())
+        .collect::<Vec<i64>>();
+    let mut computer = Computer::new(*a, *b, *c, &program);
+    let solution = find_program(0, &mut computer);
+    println!("Value in decimal notation: {}", solution);
 }
