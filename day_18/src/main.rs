@@ -16,7 +16,7 @@ fn h(pos: (usize, usize), goal: (usize, usize)) -> usize {
     .pow(2) as usize
 }
 
-fn find_path(map: &Array2<usize>, goal: (usize, usize)) -> Vec<(usize, usize)> {
+fn find_path(map: &Array2<usize>, goal: (usize, usize)) -> Option<Vec<(usize, usize)>> {
     // A* algorithm, largely copied from https://en.wikipedia.org/wiki/A*_search_algorithm
     let mut openSet = HashSet::new();
     let mut cameFrom = HashMap::new();
@@ -42,7 +42,7 @@ fn find_path(map: &Array2<usize>, goal: (usize, usize)) -> Vec<(usize, usize)> {
                 path.push(next);
                 current = next;
             }
-            return path;
+            return Some(path);
         }
         openSet.remove(&current);
         for neighbour in [(0, 1), (1, 0), (0, -1), (-1, 0)].iter() {
@@ -71,7 +71,14 @@ fn find_path(map: &Array2<usize>, goal: (usize, usize)) -> Vec<(usize, usize)> {
             }
         }
     }
-    panic!("No path found");
+    None
+}
+
+fn fill_map(coords: &Vec<(i16, i16)>, bytes: usize, map: &mut Array2<usize>) {
+    for coord in &coords[..bytes] {
+        let (x, y) = coord;
+        map[[*x as usize, *y as usize]] = 1;
+    }
 }
 
 fn main() {
@@ -87,18 +94,29 @@ fn main() {
         })
         .collect::<Vec<_>>();
     let size = 71;
-    let bytes = 1024;
     let mut map = Array2::zeros((size, size));
-    for coord in &coords[..bytes] {
-        let (x, y) = coord;
-        map[[*x as usize, *y as usize]] = 1;
+    // There might be smarter ways, but we simply use bisect to find the first byte that cuts all paths
+    let mut lower_bound = 1024_usize; // we know there is a path
+    let mut upper_bound = coords.len();
+    let mut current_guess = (upper_bound - lower_bound) / 2;
+    loop {
+        map.fill(0);
+        fill_map(&coords, current_guess, &mut map);
+        if find_path(&map, (size - 1, size - 1)).is_some() {
+            lower_bound = current_guess;
+        } else {
+            upper_bound = current_guess;
+            current_guess = upper_bound;
+        }
+        if upper_bound - lower_bound <= 1 {
+            break;
+        }
+        current_guess = lower_bound + (upper_bound - lower_bound) / 2;
     }
-    println!("{:?}", map);
-    let path: Vec<(usize, usize)> = find_path(&map, (size - 1, size - 1));
+
+    map.fill(0);
+    fill_map(&coords, lower_bound, &mut map);
+    let path = find_path(&map, (size - 1, size - 1)).unwrap();
     println!("Path: {:?}", path);
-    for (x, y) in path.iter() {
-        map[[*x, *y]] = 8;
-    }
-    println!("{:?}", map.t());
-    println!("Steps: {}", path.len() - 1);
+    println!("Coordinates: {:?}", coords[lower_bound]); // first coordinate not read in
 }
