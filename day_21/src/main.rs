@@ -1,13 +1,6 @@
-use std::fs;
-
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-enum KeyPress {
-    Up,
-    Down,
-    Left,
-    Right,
-    A,
-}
+use cached::proc_macro::cached;
+use lazy_static::lazy_static;
+use std::{collections::HashMap, fs, vec};
 
 fn translate(code: &str) -> Vec<(usize, usize)> {
     let mut translated = Vec::new();
@@ -30,73 +23,114 @@ fn translate(code: &str) -> Vec<(usize, usize)> {
     translated
 }
 
-fn keypad_pos(key: KeyPress) -> (usize, usize) {
+fn keypad_pos(key: char) -> (usize, usize) {
     match key {
-        KeyPress::Up => (0, 1),
-        KeyPress::A => (0, 2),
-        KeyPress::Down => (1, 1),
-        KeyPress::Left => (1, 0),
-        KeyPress::Right => (1, 2),
+        '^' => (0, 1),
+        'A' => (0, 2),
+        'v' => (1, 1),
+        '<' => (1, 0),
+        '>' => (1, 2),
+        _ => panic!("Invalid key"),
     }
 }
 
-fn move_and_press(pos: &mut (usize, usize), target: (usize, usize)) -> Vec<KeyPress> {
-    // println!("Moving from {:?} to {:?}", pos, target);
-    let mut key_presses = Vec::new();
-    while *pos != target {
-        if pos.1 < target.1 {
-            pos.1 += 1;
-            key_presses.push(KeyPress::Right);
-        } else if pos.0 > target.0 {
-            pos.0 -= 1;
-            key_presses.push(KeyPress::Up);
-        } else if pos.0 < target.0 {
-            pos.0 += 1;
-            key_presses.push(KeyPress::Down);
-        } else if pos.1 > target.1 {
-            pos.1 -= 1;
-            key_presses.push(KeyPress::Left);
-        }
-        assert!((pos.0, pos.1) != (0, 0));
+lazy_static! {
+    // This seemed to be easier to hard-code, but in the end it was not...
+    static ref MOVE_TRANSLATION: HashMap<&'static str, Vec<&'static str>> = {
+        let mut m = HashMap::new();
+        m.insert("A", vec!["A"]);
+        m.insert("<A", vec!["v<<A", ">>^A"]);
+        m.insert("vA", vec!["<vA", "^>A"]);
+        m.insert(">A", vec!["vA", "^A"]);
+        m.insert("^A", vec!["<A", ">A"]);
+        m.insert("<<A", vec!["v<<A", "A", ">>^A"]);
+        m.insert(">>A", vec!["vA", "A", "^A"]);
+        m.insert("<vA", vec!["v<<A", ">A", "^>A"]);
+        m.insert("<^A", vec!["v<<A", ">^A", ">A"]);
+        m.insert(">vA", vec!["vA", "<A", "^>A"]);
+        m.insert(">^A", vec!["vA", "<^A", ">A"]);
+        m.insert("v<A", vec!["<vA", "<A", ">>^A"]);
+        m.insert("v>A", vec!["<vA", ">A", "^A"]);
+        m.insert("^<A", vec!["<A", "v<A", ">>^A"]);
+        m.insert("^>A", vec!["<A", "v>A", "^A"]);
+        m.insert("^^A", vec!["<A", "A", ">A"]);
+        m.insert("^^>A", vec!["<A", "A", "v>A", "^A"]);
+        m.insert("^^<A", vec!["<A", "A", "v<A", ">>^A"]);
+        m.insert("<^^A", vec!["v<<A", ">^A", "A", ">A"]);
+        m.insert("<<^A", vec!["v<<A", "A", ">^A", ">A"]);
+        m.insert("vvA", vec!["<vA", "A", "^>A"]);
+        m.insert(">>^A", vec!["vA", "A", "<^A", ">A"]);
+        m.insert(">^^A", vec!["vA", "<^A", "A", ">A"]);
+        m.insert(">>vA", vec!["vA", "A", "<A", "^>A"]);
+        m.insert("v<<A", vec!["<vA", "<A", "A", ">>^A"]);
+        m.insert("vv>A", vec!["<vA", "A", ">A", "^A"]);
+        m.insert("^<<A", vec!["<A", "v<A", "A", ">>^A"]);
+        m.insert(">vvA", vec!["vA", "<A", "A", "^>A"]);
+        m.insert("^>>A", vec!["<A", "v>A", "A", "^A"]);
+        m.insert("^^^A", vec!["<A", "A", "A", ">A"]);
+        m.insert("vvvA", vec!["<vA", "A", "A", "^>A"]);
+        m.insert("vvv<A", vec!["<vA", "A", "A", "<A", ">>^A"]);
+        m.insert("vvv>A", vec!["<vA", "A", "A", ">A", "^A"]);
+        m.insert("^^^<A", vec!["<A", "A", "A", "v<A", ">>^A"]);
+        m.insert("^^^>A", vec!["<A", "A", "A", "v>A", "^A"]);
+        m.insert("<vvvA", vec!["v<<A", ">A", "A", "A", "^>A"]);
+        m.insert(">vvvA", vec!["vA", "<A", "A", "A", "^>A"]);
+        m.insert("<^^^A", vec!["v<<A", ">^A", "A", "A", ">A"]);
+        m.insert(">^^^A", vec!["vA", "<^A", "A", "A", ">A"]);
+        m.insert("^^<<A", vec!["<A", "A", "v<A", "A", ">>^A"]);
+        m.insert("<<^^A", vec!["v<<A", "A", ">^A", "A", ">A"]);
+        m
+    };
+}
+
+#[cached]
+fn shortest_sequence(moves: String, robots: usize) -> usize {
+    if robots == 0 {
+        return moves.len();
     }
-    key_presses.push(KeyPress::A);
-    key_presses
+    let mut presses = 0;
+    let translations = MOVE_TRANSLATION.get(moves.as_str()).unwrap();
+    for translation in translations {
+        presses += shortest_sequence(translation.to_string(), robots - 1);
+    }
+    presses
 }
 
 fn all_moves(
     start: (usize, usize),
     target: (usize, usize),
     forbidden: (usize, usize),
-) -> Vec<Vec<KeyPress>> {
-    let mut moves = Vec::new();
+) -> Vec<String> {
+    let mut moves: Vec<String> = Vec::new();
+    assert!(start != forbidden);
     if start == target {
-        moves.push(vec![]);
+        moves.push("".to_string());
         // No moves needed
-    } else if start.0 == target.0 {
+    } else if start.0 == target.0 && target.0 != forbidden.0 {
         if start.1 < target.1 {
-            moves.push(vec![KeyPress::Right; target.1 - start.1]);
+            moves.push(">".to_string().repeat(target.1 - start.1));
         } else if start.1 > target.1 {
-            moves.push(vec![KeyPress::Left; start.1 - target.1]);
+            moves.push("<".to_string().repeat(start.1 - target.1));
         }
-    } else if start.1 == target.1 {
+    } else if start.1 == target.1 && target.1 != forbidden.1 {
         if start.0 < target.0 {
-            moves.push(vec![KeyPress::Down; target.0 - start.0]);
+            moves.push("v".to_string().repeat(target.0 - start.0));
         } else if start.0 > target.0 {
-            moves.push(vec![KeyPress::Up; start.0 - target.0]);
+            moves.push("^".to_string().repeat(start.0 - target.0));
         }
     } else {
         // Try the two options
         if start.0 <= target.0 {
-            let mut moves1 = vec![KeyPress::Down; target.0 - start.0];
-            let mut moves2 = Vec::new();
+            let mut moves1 = "v".to_string().repeat(target.0 - start.0);
+            let mut moves2 = String::new();
             if start.1 < target.1 {
-                moves1.extend(vec![KeyPress::Right; target.1 - start.1]);
-                moves2.extend(vec![KeyPress::Right; target.1 - start.1]);
+                moves1.push_str(&">".to_string().repeat(target.1 - start.1));
+                moves2.push_str(&">".to_string().repeat(target.1 - start.1));
             } else if start.1 > target.1 {
-                moves1.extend(vec![KeyPress::Left; start.1 - target.1]);
-                moves2.extend(vec![KeyPress::Left; start.1 - target.1]);
+                moves1.push_str(&"<".to_string().repeat(start.1 - target.1));
+                moves2.push_str(&"<".to_string().repeat(start.1 - target.1));
             }
-            moves2.extend(vec![KeyPress::Down; target.0 - start.0]);
+            moves2.push_str(&"v".to_string().repeat(target.0 - start.0));
             if !(target.0 == forbidden.0 && start.1 == forbidden.1) {
                 moves.push(moves1);
             }
@@ -104,24 +138,26 @@ fn all_moves(
                 moves.push(moves2);
             }
         } else {
-            let mut moves1 = vec![KeyPress::Up; start.0 - target.0];
-            let mut moves2 = Vec::new();
+            let mut moves1 = "^".to_string().repeat(start.0 - target.0);
+            let mut moves2 = String::new();
             if start.1 < target.1 {
-                moves1.extend(vec![KeyPress::Right; target.1 - start.1]);
-                moves2.extend(vec![KeyPress::Right; target.1 - start.1]);
+                moves1.push_str(&">".to_string().repeat(target.1 - start.1));
+                moves2.push_str(&">".to_string().repeat(target.1 - start.1));
             } else if start.1 > target.1 {
-                moves1.extend(vec![KeyPress::Left; start.1 - target.1]);
-                moves2.extend(vec![KeyPress::Left; start.1 - target.1]);
+                moves1.push_str(&"<".to_string().repeat(start.1 - target.1));
+                moves2.push_str(&"<".to_string().repeat(start.1 - target.1));
             }
-            moves2.extend(vec![KeyPress::Up; start.0 - target.0]);
-            moves.push(moves1);
+            moves2.push_str(&"^".to_string().repeat(start.0 - target.0));
+            if !(target.0 == forbidden.0 && start.1 == forbidden.1) {
+                moves.push(moves1);
+            }
             if !(start.0 == forbidden.0 && target.1 == forbidden.1) {
                 moves.push(moves2);
             }
         }
     }
     for m in moves.iter_mut() {
-        m.push(KeyPress::A);
+        m.push_str("A");
     }
     moves
 }
@@ -130,46 +166,63 @@ fn main() {
     let content = fs::read_to_string("input.txt").expect("Failed to read the file");
     let codes = content.lines().collect::<Vec<_>>();
     let positions = codes.iter().map(|x| translate(x)).collect::<Vec<_>>();
+    // Verify the translations
+    for (target, moves) in MOVE_TRANSLATION.iter() {
+        let mut pos = keypad_pos('A');
+        let mut result = String::new();
+        for m in moves.iter() {
+            for c in m.chars() {
+                if c == 'A' {
+                    break;
+                }
+                pos = match c {
+                    '^' => (pos.0 - 1, pos.1),
+                    'v' => (pos.0 + 1, pos.1),
+                    '<' => (pos.0, pos.1 - 1),
+                    '>' => (pos.0, pos.1 + 1),
+                    _ => panic!("Invalid move"),
+                };
+                if pos == (0, 0) {
+                    panic!(
+                        "Invalid move to forbidden position: {:?} (moves: {:?}), target: {:?}",
+                        m, moves, target
+                    );
+                }
+            }
+            let pressed = match pos {
+                (0, 1) => "^",
+                (0, 2) => "A",
+                (1, 1) => "v",
+                (1, 0) => "<",
+                (1, 2) => ">",
+                _ => panic!("Invalid position {:?} in moves for {}", pos, target),
+            };
+            result.push_str(pressed);
+        }
+        if result != *target {
+            panic!("Translation failed for {} -> {}", target, result);
+        }
+    }
+
     let mut total_complexity = 0;
     for (code, position) in codes.into_iter().zip(positions) {
         println!("Code        : {:?}", code);
         println!("Positions   : {:?}", position);
         let mut total_presses = 0;
+        // let mut memo = HashMap::new();
         for (i, digit) in code.chars().enumerate() {
-            let mut start;
-            if i == 0 {
-                start = (3, 2);
-            } else {
-                start = position[i - 1];
-            }
+            let start = if i == 0 { (3, 2) } else { position[i - 1] };
             let moves = all_moves(start, position[i], (3, 0));
-            println!("  First robot for {digit} : {:?}", moves);
-            let mut moves2 = Vec::new();
-            for (i, m) in moves.iter().enumerate() {
-                let mut moves21: Vec<KeyPress> = Vec::new();
-                let mut start = (0, 2);
-                for key in m {
-                    let target = keypad_pos(*key);
-                    moves21.extend(move_and_press(&mut start, target));
-                }
-                moves2.push(moves21);
+            let moves_as_str = moves.iter().map(|x| x.as_str()).collect::<Vec<_>>();
+            let mut possible_moves = Vec::new();
+            for m in moves_as_str {
+                let presses = shortest_sequence(m.to_string(), 25);
+                possible_moves.push(presses);
             }
-            // let flat_moves = flatten(moves2);
-            println!("    Second robot for {digit}: {:?}", moves2);
-            let mut moves3 = Vec::new();
-            for (i, m) in moves2.iter().enumerate() {
-                let mut moves31: Vec<KeyPress> = Vec::new();
-                let mut start = (0, 2);
-                for key in m {
-                    let target = keypad_pos(*key);
-                    moves31.extend(move_and_press(&mut start, target));
-                }
-                moves3.push(moves31);
-            }
-            println!("    Me for {digit}          : {:?}", moves3);
-            let shortest = moves3.iter().min_by_key(|x| x.len()).unwrap();
-            println!("    Me for {digit}          : {:?}", shortest);
-            total_presses += shortest.len();
+            println!();
+            let shortest = possible_moves.iter().min().unwrap();
+            println!("    Shortest presses for {digit} : {}", shortest);
+            total_presses += shortest;
         }
         println!("Total presses: {}", total_presses);
         let numerical = code[0..3].parse::<usize>().unwrap();
